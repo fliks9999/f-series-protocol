@@ -20,6 +20,9 @@
 ## Origins
 The f-series synthetic assets use a dual system of fractionally backed real assets and algorithmic. Inspiration comes from Frax and Terra.
 
+## DP Vault Strategies
+Any user can deploy vault strategies that can be used by the USDf contract to grow the initial principal. More coming soon
+
 ## Ecosystem Addresses
 * USDf: [0x05462671c05adc39a6521fa60d5e9443e9e9d2b9](http://etherscan.io/address/0x05462671c05adc39a6521fa60d5e9443e9e9d2b9)
 * Gaia: [0x4B9E5fe882b2fbB3E098c9A25a8Ce66135Ed2be4](http://etherscan.io/address/0x4B9E5fe882b2fbB3E098c9A25a8Ce66135Ed2be4)
