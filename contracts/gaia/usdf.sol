@@ -269,8 +269,6 @@ contract USDf is ERC20UpgradeSafe, OwnableUpgradeSafe, ReentrancyGuardUpgradeSaf
         _totalSupply = _totalSupply.add(synthAmount);
         _synthBalance[msg.sender] = _synthBalance[msg.sender].add(synthAmount);
 
-        _lastAction[msg.sender] = now;
-
         emit Transfer(address(0x0), msg.sender, synthAmount);
         emit Mint(gaia, msg.sender, collateral, collateralAmount, gaiaAmount, synthAmount);
     }
@@ -407,6 +405,22 @@ contract USDf is ERC20UpgradeSafe, OwnableUpgradeSafe, ReentrancyGuardUpgradeSaf
     function moveCollateral(address collateral, address location, uint256 amount) external onlyOwner {
         require(acceptedCollateral[collateral], "invalid collateral");
         SafeERC20.safeTransfer(IERC20(collateral), location, amount);
+    }
+
+    // multi-purpose function
+    function executeTransaction(address target, uint value, string memory signature, bytes memory data) public payable onlyOwner returns (bytes memory) {
+        bytes memory callData;
+
+        if (bytes(signature).length == 0) {
+            callData = data;
+        } else {
+            callData = abi.encodePacked(bytes4(keccak256(bytes(signature))), data);
+        }
+
+        (bool success, bytes memory returnData) = target.call.value(value)(callData);
+        require(success);
+
+        return returnData;
     }
 
     // internal private functions ============================================================
