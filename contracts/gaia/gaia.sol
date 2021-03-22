@@ -67,7 +67,7 @@ contract Gaia is ERC20UpgradeSafe, OwnableUpgradeSafe {
         onlyMinter
     {
         _totalSupply = _totalSupply.add(amount);
-        _gaiaBalances[to] = _gaiaBalances[to].sub(amount);
+        _gaiaBalances[to] = _gaiaBalances[to].add(amount);
 
         emit Transfer(address(0x0), to, amount);
     }
