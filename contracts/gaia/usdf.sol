@@ -52,7 +52,7 @@ contract USDf is ERC20UpgradeSafe, OwnableUpgradeSafe, ReentrancyGuardUpgradeSaf
     mapping (address => uint256) public collateralDecimals;
     mapping (address => address) public collateralOracle;
     mapping (address => bool) public seenCollateral;
-    mapping (address => uint256) public _burnedSynth;
+    mapping (address => uint256) private _burnedSynth;
 
     modifier validRecipient(address to) {
         require(to != address(0x0));
@@ -286,7 +286,6 @@ contract USDf is ERC20UpgradeSafe, OwnableUpgradeSafe, ReentrancyGuardUpgradeSaf
     }
 
     function withdraw(uint256 synthAmount) public nonReentrant sync() {
-        require(synthAmount == 0, "temporarily disabled");
         require(synthAmount <= _synthBalance[msg.sender], "insufficient balance");
 
         _totalSupply = _totalSupply.sub(synthAmount);
@@ -327,10 +326,6 @@ contract USDf is ERC20UpgradeSafe, OwnableUpgradeSafe, ReentrancyGuardUpgradeSaf
     function burnGaia(uint256 amount) external onlyOwner {
         require(amount <= IERC20(gaia).balanceOf(msg.sender));
         IGaia(gaia).burn(msg.sender, amount);
-    }
-
-    function setBurnedSynth(address user_, uint256 value_) external onlyOwner {
-        _burnedSynth[user_] = value_;
     }
 
     function setDelay(uint256 val_) external onlyOwner {
