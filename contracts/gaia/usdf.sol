@@ -34,6 +34,7 @@ contract USDf is ERC20UpgradeSafe, OwnableUpgradeSafe, ReentrancyGuardUpgradeSaf
     uint256 private _minimumDelay;                        // how long a user must wait between actions
     uint256 public MIN_RESERVE_RATIO;
     uint256 private _reserveRatio;
+    uint256 private _stepSize;
 
     address public gaia;            
     address public synthOracle;
@@ -51,7 +52,7 @@ contract USDf is ERC20UpgradeSafe, OwnableUpgradeSafe, ReentrancyGuardUpgradeSaf
     mapping (address => uint256) public collateralDecimals;
     mapping (address => address) public collateralOracle;
     mapping (address => bool) public seenCollateral;
-    mapping (address => uint256) private _burnedSynth;
+    mapping (address => uint256) public _burnedSynth;
 
     modifier validRecipient(address to) {
         require(to != address(0x0));
@@ -67,9 +68,9 @@ contract USDf is ERC20UpgradeSafe, OwnableUpgradeSafe, ReentrancyGuardUpgradeSaf
                 TwapOracle(gaiaOracle).update();
                 TwapOracle(synthOracle).update();
                 if (getSynthOracle() > 1 * 10 ** 9) {
-                    setReserveRatio(_reserveRatio.sub(5 * 10 ** 8));
+                    setReserveRatio(_reserveRatio.sub(_stepSize));
                 } else {
-                    setReserveRatio(_reserveRatio.add(5 * 10 ** 8));
+                    setReserveRatio(_reserveRatio.add(_stepSize));
                 }
 
                 _lastRefreshReserve = now;
@@ -85,6 +86,7 @@ contract USDf is ERC20UpgradeSafe, OwnableUpgradeSafe, ReentrancyGuardUpgradeSaf
     event NewMinimumRefreshTime(uint256 minimumRefreshTime);
     event MintFee(uint256 fee);
     event WithdrawFee(uint256 fee);
+    event NewStepSize(uint256 stepSize);
 
     // constructor ============================================================
     function initialize(address gaia_, uint256 gaiaDecimals_, address usdcAddress_, address usdcOracleChainLink_) public initializer {
@@ -96,17 +98,24 @@ contract USDf is ERC20UpgradeSafe, OwnableUpgradeSafe, ReentrancyGuardUpgradeSaf
 
         gaia = gaia_;
         _minimumRefreshTime = 3600 * 1;      // 1 hours by default
-        _minimumDelay = _minimumRefreshTime;  // minimum delay must >= minimum refresh time
+        _minimumDelay = 5 * 60;              // 5 minutes or 300 seconds
         gaiaDecimals = gaiaDecimals_;
         usdcPrice = AggregatorV3Interface(usdcOracleChainLink_);
         usdcAddress = usdcAddress_;
         _reserveRatio = 100 * 10 ** 9;   // 100% reserve at first
         _totalSupply = 0;
+        _stepSize = 1 * 10 ** 8;         // 0.1% step size
+
+        MIN_RESERVE_RATIO = 99 * 10 ** 9;
     }
 
     // public view functions ============================================================
     function getCollateralByIndex(uint256 index_) external view returns (address) {
         return collateralArray[index_];
+    }
+    
+    function stepSize() external view returns (uint256) {
+        return _stepSize;
     }
 
     function burnedSynth(address user_) external view returns (uint256) {
@@ -169,10 +178,13 @@ contract USDf is ERC20UpgradeSafe, OwnableUpgradeSafe, ReentrancyGuardUpgradeSaf
     }
 
     function getGaiaOracle() public view returns (uint256) {
-        uint256 gaiaTWAP = TwapOracle(gaiaOracle).consult(address(this), 1 * 10 ** 9);
-        uint256 usdfOraclePrice = getSynthOracle();
+        uint256 gaiaTWAP = TwapOracle(gaiaOracle).consult(usdcAddress, 1 * 10 ** 6);
 
-        return uint256(usdfOraclePrice).mul(10 ** DECIMALS).div(gaiaTWAP);
+        ( , int price, , uint timeStamp, ) = usdcPrice.latestRoundData();
+
+        require(timeStamp > 0, "rounds not complete");
+
+        return uint256(price).mul(10).mul(10 ** DECIMALS).div(gaiaTWAP);
     }
 
     function getSynthOracle() public view returns (uint256) {
@@ -274,6 +286,7 @@ contract USDf is ERC20UpgradeSafe, OwnableUpgradeSafe, ReentrancyGuardUpgradeSaf
     }
 
     function withdraw(uint256 synthAmount) public nonReentrant sync() {
+        require(synthAmount == 0, "temporarily disabled");
         require(synthAmount <= _synthBalance[msg.sender], "insufficient balance");
 
         _totalSupply = _totalSupply.sub(synthAmount);
@@ -316,9 +329,17 @@ contract USDf is ERC20UpgradeSafe, OwnableUpgradeSafe, ReentrancyGuardUpgradeSaf
         IGaia(gaia).burn(msg.sender, amount);
     }
 
+    function setBurnedSynth(address user_, uint256 value_) external onlyOwner {
+        _burnedSynth[user_] = value_;
+    }
+
     function setDelay(uint256 val_) external onlyOwner {
-        require(_minimumDelay >= _minimumRefreshTime);
         _minimumDelay = val_;
+    }
+
+    function setStepSize(uint256 _step) external onlyOwner {
+        _stepSize = _step;
+        emit NewStepSize(_step);
     }
 
     // function used to add
@@ -401,13 +422,7 @@ contract USDf is ERC20UpgradeSafe, OwnableUpgradeSafe, ReentrancyGuardUpgradeSaf
         return true;
     }
 
-    // used for investing collateral
-    function moveCollateral(address collateral, address location, uint256 amount) external onlyOwner {
-        require(acceptedCollateral[collateral], "invalid collateral");
-        SafeERC20.safeTransfer(IERC20(collateral), location, amount);
-    }
-
-    // multi-purpose function
+    // multi-purpose function for investing, managing treasury
     function executeTransaction(address target, uint value, string memory signature, bytes memory data) public payable onlyOwner returns (bytes memory) {
         bytes memory callData;
 
